@@ -11,13 +11,13 @@ cheat by reading the generator's data.
 from __future__ import annotations
 
 import json
+import os
 import random
 import shutil
 from dataclasses import dataclass, field
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from email.message import EmailMessage
 from email.utils import format_datetime
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -469,13 +469,13 @@ def render_pdf(spec: InvoiceSpec, sup: Supplier, path: Path) -> None:
     c.save()
 
 
-def write_eml(pdf_path: Path, eml_path: Path, spec: InvoiceSpec, sup: Supplier) -> None:
+def write_eml(pdf_path: Path, eml_path: Path, spec: InvoiceSpec, sup: Supplier,
+              sent: datetime) -> None:
     msg = EmailMessage()
     msg["From"] = f"{sup.name} <{sup.email}>"
     msg["To"] = "ap@aurorabio.se"
     msg["Subject"] = f"Invoice {spec.invoice_number} from {sup.name}"
-    d = spec.invoice_date or spec.due_date
-    msg["Date"] = format_datetime(datetime(d.year, d.month, d.day, 9, 30, tzinfo=timezone.utc))
+    msg["Date"] = format_datetime(sent)
     msg["Message-ID"] = f"<{spec.invoice_number.replace(' ', '')}@{sup.email.split('@')[1]}>"
     msg.set_content(
         f"Dear customer,\n\nPlease find attached invoice {spec.invoice_number}.\n\n"
@@ -516,13 +516,14 @@ def build_specs(seed: int = 42) -> List[InvoiceSpec]:
     by_sup: Dict[str, List[InvoiceSpec]] = {}
     for sup in SUPPLIERS:
         dates = sorted(start + timedelta(days=rng.randint(0, span)) for _ in range(sup.count))
-        n0 = rng.randint(100, 900)
+        n = rng.randint(100, 900)
         cust = f"{rng.randint(10000, 99999)}"
         lst = []
         for i, d in enumerate(dates):
+            n += rng.randint(5, 40)  # strictly increasing, gaps >= 5
             spec = InvoiceSpec(
                 supplier_key=sup.key,
-                invoice_number=sup.inv_fmt.format(n=n0 + i * rng.randint(3, 40)),
+                invoice_number=sup.inv_fmt.format(n=n),
                 invoice_date=d,
                 due_date=d + timedelta(days=30),
                 po_number=new_po(),
@@ -585,7 +586,7 @@ def build_specs(seed: int = 42) -> List[InvoiceSpec]:
     near = InvoiceSpec(**{**asdict_shallow(orig), "planted": ["duplicate_near"],
                           "duplicate_of": orig.filename, "as_eml": False})
     near.invoice_number = sup_by_key["bioreagent"].inv_fmt.format(
-        n=int(orig.invoice_number.split("/")[-1]) + 3)
+        n=int(orig.invoice_number.split("/")[-1]) + 2)  # fits in the gap before the next number
     near.invoice_date = orig.invoice_date + timedelta(days=6)
     near.due_date = near.invoice_date + timedelta(days=30)
     near.items = [LineItem(it.description, it.qty, round(it.unit_price * 1.02, 2))
@@ -616,9 +617,22 @@ def generate(out_dir: Path, seed: int = 42, clean: bool = True) -> List[dict]:
     specs = build_specs(seed)
     truth = []
     rendered: Dict[str, Path] = {}
+    received_at: Dict[str, datetime] = {}
     for s in specs:
         sup = sup_by_key[s.supplier_key]
         target = out_dir / s.filename
+
+        # Realistic "received" time (file mtime / email Date): the morning after
+        # the invoice date; re-sent exact duplicates arrive two days after the
+        # original.
+        if "duplicate_exact" in s.planted:
+            received = received_at[s.duplicate_of] + timedelta(days=2)
+        else:
+            issued = s.invoice_date or (s.due_date - timedelta(days=30))
+            received = datetime(issued.year, issued.month, issued.day, 9, 30,
+                                tzinfo=timezone.utc) + timedelta(days=1, minutes=len(truth))
+        received_at[s.filename] = received
+
         if "duplicate_exact" in s.planted:
             src = rendered[s.duplicate_of]
             if src.suffix == ".pdf":
@@ -630,13 +644,16 @@ def generate(out_dir: Path, seed: int = 42, clean: bool = True) -> List[dict]:
             render_pdf(s, sup, tmp_pdf)
             final_pdf_name = tmp_pdf.with_suffix("")  # .pdf
             tmp_pdf.rename(final_pdf_name)
-            write_eml(final_pdf_name, target, s, sup)
+            write_eml(final_pdf_name, target, s, sup, received)
             final_pdf_name.unlink()
         else:
             render_pdf(s, sup, target)
         rendered[s.filename] = target
+        os.utime(target, (received.timestamp(), received.timestamp()))
+
         truth.append({
             "source_file": s.filename,
+            "received_at": received.isoformat(),
             "supplier": sup.name,
             "invoice_number": s.invoice_number,
             "invoice_date": s.invoice_date.isoformat() if s.invoice_date else None,

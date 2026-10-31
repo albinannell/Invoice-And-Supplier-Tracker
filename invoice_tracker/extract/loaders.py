@@ -11,8 +11,10 @@ import email.policy
 import hashlib
 import io
 import re
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
-from typing import Iterator, List
+from typing import Iterator, List, Optional
 
 import pdfplumber
 
@@ -36,7 +38,9 @@ def load(path: Path) -> List[RawDocument]:
     path = Path(path)
     suffix = path.suffix.lower()
     if suffix == ".pdf":
-        return [load_pdf_bytes(path.read_bytes(), path.name)]
+        doc = load_pdf_bytes(path.read_bytes(), path.name)
+        doc.received_at = _mtime(path)
+        return [doc]
     if suffix == ".eml":
         return load_eml(path)
     raise ValueError(f"Unsupported file type: {path.name}")
@@ -96,6 +100,7 @@ def group_words(words: List[dict]) -> List[Line]:
 
 def load_eml(path: Path) -> List[RawDocument]:
     msg = email.message_from_bytes(path.read_bytes(), policy=email.policy.default)
+    received = _email_date(msg.get("Date")) or _mtime(path)
     pdfs = [part for part in msg.iter_attachments()
             if part.get_content_type() == "application/pdf"
             or (part.get_filename() or "").lower().endswith(".pdf")]
@@ -103,14 +108,32 @@ def load_eml(path: Path) -> List[RawDocument]:
         docs = []
         for part in pdfs:
             src = path.name if len(pdfs) == 1 else f"{path.name}#{part.get_filename()}"
-            docs.append(load_pdf_bytes(part.get_content(), src, origin="eml-attachment"))
+            doc = load_pdf_bytes(part.get_content(), src, origin="eml-attachment")
+            doc.received_at = received
+            docs.append(doc)
         return docs
     body = msg.get_body(preferencelist=("plain", "html"))
     text = body.get_content() if body else ""
     if body is not None and body.get_content_type() == "text/html":
         text = re.sub(r"<[^>]+>", " ", text)
     header = f"From: {msg.get('From', '')}\nSubject: {msg.get('Subject', '')}\n"
-    return [load_text(header + text, path.name, origin="eml-body")]
+    doc = load_text(header + text, path.name, origin="eml-body")
+    doc.received_at = received
+    return [doc]
+
+
+def _mtime(path: Path) -> datetime:
+    return datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+
+
+def _email_date(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        dt = parsedate_to_datetime(str(value))
+    except (TypeError, ValueError):
+        return None
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
 
 
 def load_text(text: str, source_file: str, origin: str = "text") -> RawDocument:

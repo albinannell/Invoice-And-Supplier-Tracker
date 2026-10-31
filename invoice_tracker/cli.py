@@ -7,6 +7,7 @@ from collections import Counter
 from pathlib import Path
 
 from .extract import available_extractors, get_extractor
+from .flags import ALL_FLAGS
 from .output import write_invoices_csv
 from .pipeline import process_inbox
 
@@ -18,11 +19,14 @@ def cmd_run(args: argparse.Namespace) -> None:
     invoices = process_inbox(inbox, get_extractor(args.extractor))
     csv_path = write_invoices_csv(invoices, out / "invoices.csv")
 
-    incomplete = sum(1 for i in invoices if i.missing_fields())
     by_cat = Counter(i.category for i in invoices)
+    by_flag = Counter(f for i in invoices for f in i.flags)
+    flagged = sum(1 for i in invoices if i.flags)
     print(f"Processed {len(invoices)} invoices from {inbox}/")
-    print(f"  categories: " + ", ".join(f"{c} {n}" for c, n in by_cat.most_common()))
-    print(f"  with missing fields: {incomplete}")
+    print("  categories: " + ", ".join(f"{c} {n}" for c, n in by_cat.most_common()))
+    print(f"  flagged:    {flagged} invoices"
+          + (" (" + ", ".join(f"{f} {by_flag[f]}" for f in ALL_FLAGS if by_flag[f]) + ")"
+             if flagged else ""))
     print(f"Wrote {csv_path}")
 
 

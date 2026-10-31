@@ -34,6 +34,9 @@ INVOICE_COLUMNS: Dict[str, Callable[[Invoice], object]] = {
     "category": lambda i: i.category,
     "category_source": lambda i: i.category_source,
     "line_items": lambda i: " | ".join(i.line_items),
+    "flags": lambda i: "; ".join(i.flags),
+    "flag_reasons": lambda i: " | ".join(i.flag_reasons),
+    "duplicate_of": lambda i: i.duplicate_of,
     "extractor": lambda i: i.extractor,
 }
 

@@ -23,8 +23,19 @@ def test_csv_row_format(tmp_path):
         "supplier_known": "yes", "invoice_number": "BFE000834",
         "invoice_date": "2026-06-23", "total_amount": "494.10", "currency": "EUR",
         "po_number": "", "category": "shipping", "category_source": "supplier",
-        "line_items": "Air freight | Customs clearance fee", "extractor": "rules",
+        "line_items": "Air freight | Customs clearance fee",
+        "flags": "", "flag_reasons": "", "duplicate_of": "", "extractor": "rules",
     }]
+
+
+def test_csv_flag_columns(tmp_path):
+    inv = Invoice("b.pdf", flags=["duplicate_exact", "unusual_amount"],
+                  flag_reasons=["Exact duplicate of a.pdf (identical file)", "Amount ... 9x"],
+                  duplicate_of="a.pdf")
+    row = _read(write_invoices_csv([inv], tmp_path / "invoices.csv"))[0]
+    assert row["flags"] == "duplicate_exact; unusual_amount"
+    assert row["flag_reasons"] == "Exact duplicate of a.pdf (identical file) | Amount ... 9x"
+    assert row["duplicate_of"] == "a.pdf"
 
 
 def test_run_command_writes_one_row_per_invoice(synthetic_inbox, tmp_path, capsys):

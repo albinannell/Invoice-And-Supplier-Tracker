@@ -2,8 +2,7 @@
 
 Drop PDF or `.eml` invoices into `inbox/`, run one command, get structured data out.
 
-> Status: **Stage 4 — CSV output.** Flags and the monthly summary follow in
-> later stages.
+> Status: **Stage 5 — flags.** The monthly summary follows in the next stage.
 
 ## Quick start
 
@@ -24,7 +23,7 @@ Options: `--inbox DIR`, `--out DIR`, `--extractor NAME`.
 | `source_file` | `scan_0036.eml` (a multi-PDF email gives `mail.eml#a.pdf`) |
 | `supplier` | `Baltic Freight Express OÜ` |
 | `supplier_known` | `yes` if matched a configured supplier |
-| `invoice_number` | `BFE000910` |
+| `invoice_number` | `BFE000852` |
 | `invoice_date` | `2026-09-14` (ISO) |
 | `total_amount` | `494.13` (gross, incl. VAT, `.` decimal) |
 | `currency` | `EUR` |
@@ -32,9 +31,41 @@ Options: `--inbox DIR`, `--out DIR`, `--extractor NAME`.
 | `category` | `shipping` |
 | `category_source` | `supplier` / `keywords` / `default` |
 | `line_items` | descriptions joined with ` \| ` |
+| `flags` | `duplicate_exact; unusual_amount` (empty if clean) |
+| `flag_reasons` | one human-readable reason per flag, joined with ` \| ` |
+| `duplicate_of` | source file of the original, for duplicate flags |
 | `extractor` | `rules` |
 
 Missing values are empty cells.
+
+## Flags
+
+Thresholds live in `config/flags.yaml`.
+
+| flag | when |
+|---|---|
+| `duplicate_exact` | byte-identical file, **or** same supplier + invoice number + amount, as an invoice received earlier |
+| `duplicate_near` | same supplier + PO, different invoice number, amount within 5%; **or** same supplier + invoice number with a different amount |
+| `unusual_amount` | high outlier versus the same supplier's *other* invoices in the same currency (see below) |
+| `missing_fields` | supplier, invoice number, date, total, currency or PO could not be extracted |
+
+**Which copy is the duplicate?** Invoices are ordered by when they were
+received — the email `Date` header for `.eml`, the file's modification time for
+PDFs — and only the later copy is flagged, with `duplicate_of` pointing to the
+original. Exact duplicates are left out of the outlier statistics.
+
+**Unusual amount** compares each invoice with that supplier's other invoices:
+
+- 5+ other invoices: flag if above the IQR fence (Q3 + 3 × IQR) **and** at
+  least 4× their median. The ratio guard matters because some suppliers'
+  normal invoices legitimately vary 10× (a €19 surcharge vs. a €550 pallet).
+- 4 other invoices: flag if more than 8× their median.
+- Fewer: not enough history — no check.
+
+These thresholds were tuned on 100 synthetic inboxes: all 200 planted
+outliers caught, with 5 other invoices flagged — each ≥ 5× its supplier's
+median. That's tuned on synthetic data from the same generator, so expect to
+revisit the numbers once real invoices flow through.
 
 ## Setup
 
@@ -80,8 +111,10 @@ Planted problems:
 - **3 missing fields** — 2 without PO number, 1 without invoice date
 
 `inbox/_ground_truth.json` records the true values and planted problems for
-every file; tests use it to score extraction. Output is deterministic for a
-given seed.
+every file; tests use it to score extraction and flags. File modification
+times (and email `Date` headers) are set to a realistic "received" time — the
+day after the invoice date, with re-sent duplicates two days after the
+original. Output is deterministic for a given seed.
 
 ## Extraction
 
@@ -159,6 +192,10 @@ pytest
   checks that keywords alone never assign a wrong category to the synthetic set.
 - `tests/test_output.py` checks CSV formatting and that `run` writes one
   correct row per invoice.
+- `tests/test_flags.py` checks that exactly the planted problems are flagged
+  (plus every planted problem on three other seeds), and unit-tests each rule:
+  which copy is the duplicate, tolerance, currency/supplier separation, the
+  IQR and small-history outlier rules, and missing fields.
 
 ## Project layout
 
@@ -166,9 +203,11 @@ pytest
 config/
   extraction.yaml        # label synonyms, known suppliers
   categories.yaml        # supplier -> category, keyword fallback
+  flags.yaml             # duplicate / outlier thresholds
 invoice_tracker/
   models.py              # RawDocument, Invoice
   categorize.py          # Categorizer
+  flags.py               # duplicate / outlier / missing-field flags
   output.py              # CSV writing
   extract/
     base.py              # Extractor protocol + registry

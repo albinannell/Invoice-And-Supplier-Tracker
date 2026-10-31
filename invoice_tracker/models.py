@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import List, Optional
 
 
@@ -42,6 +42,7 @@ class RawDocument:
     lines: List[Line] = field(default_factory=list)  # layout-aware view
     sha256: Optional[str] = None       # hash of the underlying PDF/text bytes
     origin: str = "pdf"                # pdf | eml-attachment | eml-body
+    received_at: Optional[datetime] = None  # email Date header, else file mtime
 
 
 @dataclass
@@ -56,12 +57,19 @@ class Invoice:
     line_items: List[str] = field(default_factory=list)
     supplier_known: bool = False       # matched a configured supplier?
     sha256: Optional[str] = None
+    received_at: Optional[datetime] = None
     extractor: str = ""
     # filled by later stages
     category: Optional[str] = None
     category_source: Optional[str] = None
     flags: List[str] = field(default_factory=list)
     flag_reasons: List[str] = field(default_factory=list)
+    duplicate_of: Optional[str] = None  # source_file of the original, if a duplicate
+
+    def add_flag(self, flag: str, reason: str) -> None:
+        if flag not in self.flags:
+            self.flags.append(flag)
+        self.flag_reasons.append(reason)
 
     REQUIRED_FIELDS = ("supplier", "invoice_number", "invoice_date",
                        "total_amount", "currency", "po_number")
