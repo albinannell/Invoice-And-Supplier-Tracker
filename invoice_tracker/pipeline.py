@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import List, Optional
 
+from .categorize import Categorizer
 from .extract import Extractor, get_extractor, iter_inbox, load
 from .models import Invoice
 
@@ -23,4 +24,12 @@ def extract_inbox(inbox: Path, extractor: Optional[Extractor] = None) -> List[In
             continue
         for doc in docs:
             invoices.append(extractor.extract(doc))
+    return invoices
+
+
+def process_inbox(inbox: Path, extractor: Optional[Extractor] = None,
+                  categorizer: Optional[Categorizer] = None) -> List[Invoice]:
+    """Extract and categorize every invoice in the inbox."""
+    invoices = extract_inbox(inbox, extractor)
+    (categorizer or Categorizer()).apply(invoices)
     return invoices

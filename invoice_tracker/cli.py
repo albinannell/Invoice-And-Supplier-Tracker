@@ -6,13 +6,13 @@ import logging
 from pathlib import Path
 
 from .extract import available_extractors, get_extractor
-from .pipeline import extract_inbox
+from .pipeline import process_inbox
 
 
 def cmd_run(args: argparse.Namespace) -> None:
-    invoices = extract_inbox(Path(args.inbox), get_extractor(args.extractor))
+    invoices = process_inbox(Path(args.inbox), get_extractor(args.extractor))
     cols = ["source_file", "supplier", "invoice_number", "invoice_date",
-            "total_amount", "currency", "po_number"]
+            "total_amount", "currency", "po_number", "category", "category_source"]
     print(" | ".join(cols))
     for inv in invoices:
         print(" | ".join("" if getattr(inv, c) is None else str(getattr(inv, c)) for c in cols))

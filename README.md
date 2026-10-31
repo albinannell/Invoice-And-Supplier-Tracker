@@ -2,8 +2,8 @@
 
 Drop PDF or `.eml` invoices into `inbox/`, run one command, get structured data out.
 
-> Status: **Stage 2 — extraction.** Categorization, CSV output, flags and
-> reporting follow in later stages.
+> Status: **Stage 3 — categorization.** CSV output, flags and reporting
+> follow in later stages.
 
 ## Quick start
 
@@ -110,23 +110,40 @@ register("llm", LLMExtractor)
 python -m invoice_tracker run --extractor llm
 ```
 
+## Categorization
+
+Each invoice gets a spend category (`lab_consumables`, `instrument_service`,
+`shipping`, or `uncategorized`) from `config/categories.yaml`:
+
+1. **supplier** — the supplier name is in the supplier → category map.
+2. **keywords** — otherwise, every line item is matched against per-category
+   keyword regexes; the category with the most hits wins.
+3. **default** — a tie or no hits gives `uncategorized` (better unsure than wrong).
+
+The `category_source` column says which rule decided. To categorize a new
+supplier, add one line under `suppliers:`.
+
 ## Tests
 
 ```bash
 pytest
 ```
 
-`tests/test_extraction.py` generates a fresh inbox, checks every field of every
-invoice against the ground truth, and unit-tests the amount/date/currency
-parsers, email-body input, unknown suppliers and extractor swapping.
+- `tests/test_extraction.py` generates a fresh inbox, checks every field of
+  every invoice against the ground truth, and unit-tests the amount/date/currency
+  parsers, email-body input, unknown suppliers and extractor swapping.
+- `tests/test_categorize.py` covers the supplier rule, keyword vote, ties, and
+  checks that keywords alone never assign a wrong category to the synthetic set.
 
 ## Project layout
 
 ```
 config/
   extraction.yaml        # label synonyms, known suppliers
+  categories.yaml        # supplier -> category, keyword fallback
 invoice_tracker/
   models.py              # RawDocument, Invoice
+  categorize.py          # Categorizer
   extract/
     base.py              # Extractor protocol + registry
     loaders.py           # PDF / .eml -> RawDocument
