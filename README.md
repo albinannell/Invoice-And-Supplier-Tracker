@@ -2,16 +2,39 @@
 
 Drop PDF or `.eml` invoices into `inbox/`, run one command, get structured data out.
 
-> Status: **Stage 3 — categorization.** CSV output, flags and reporting
-> follow in later stages.
+> Status: **Stage 4 — CSV output.** Flags and the monthly summary follow in
+> later stages.
 
 ## Quick start
 
 ```bash
 python scripts/generate_invoices.py   # fill inbox/ with synthetic invoices
-python -m invoice_tracker run         # extract every invoice in inbox/
+python -m invoice_tracker run         # inbox/ -> output/invoices.csv
 pytest                                # run the tests
 ```
+
+Options: `--inbox DIR`, `--out DIR`, `--extractor NAME`.
+
+## Output
+
+`output/invoices.csv` — one row per invoice (UTF-8 with BOM, opens cleanly in Excel):
+
+| column | example |
+|---|---|
+| `source_file` | `scan_0036.eml` (a multi-PDF email gives `mail.eml#a.pdf`) |
+| `supplier` | `Baltic Freight Express OÜ` |
+| `supplier_known` | `yes` if matched a configured supplier |
+| `invoice_number` | `BFE000910` |
+| `invoice_date` | `2026-09-14` (ISO) |
+| `total_amount` | `494.13` (gross, incl. VAT, `.` decimal) |
+| `currency` | `EUR` |
+| `po_number` | `4500820892` |
+| `category` | `shipping` |
+| `category_source` | `supplier` / `keywords` / `default` |
+| `line_items` | descriptions joined with ` \| ` |
+| `extractor` | `rules` |
+
+Missing values are empty cells.
 
 ## Setup
 
@@ -134,6 +157,8 @@ pytest
   parsers, email-body input, unknown suppliers and extractor swapping.
 - `tests/test_categorize.py` covers the supplier rule, keyword vote, ties, and
   checks that keywords alone never assign a wrong category to the synthetic set.
+- `tests/test_output.py` checks CSV formatting and that `run` writes one
+  correct row per invoice.
 
 ## Project layout
 
@@ -144,6 +169,7 @@ config/
 invoice_tracker/
   models.py              # RawDocument, Invoice
   categorize.py          # Categorizer
+  output.py              # CSV writing
   extract/
     base.py              # Extractor protocol + registry
     loaders.py           # PDF / .eml -> RawDocument
