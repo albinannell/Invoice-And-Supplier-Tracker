@@ -1,0 +1,89 @@
+# Rule-based extraction config.
+#
+# labels: regexes matched against a whole text segment (case-insensitive,
+#         optional trailing ':' allowed). Earlier entries win.
+# suppliers: known suppliers. Any alias / email domain / tax id found in the
+#            document identifies the supplier. `date_order` resolves
+#            ambiguous dates like 05/04/2026 (dmy = 5 April, mdy = May 4).
+#            `currency` is only a fallback when the document doesn't say.
+
+labels:
+  invoice_number:
+    - 'invoice (no\.?|number|nr\.?|#)'
+    - 'inv\.? ?(#|no\.?)'
+    - 'fakturanummer'
+    - 'faktura ?nr\.?'
+    - 'rechnungs?(nummer|[- ]nr\.?)'
+  invoice_date:
+    - 'invoice date'
+    - 'issue date'
+    - 'fakturadatum'
+    - 'rechnungsdatum'
+    - 'date'
+    - 'datum'
+  po_number:
+    - 'po ?(number|no\.?|#|ref\.?)?'
+    - 'customer po'
+    - 'purchase order( no\.?| number)?'
+    - '(er referens|your ref(erence)?\.?|ordernr|bestellnummer) ?/ ?po'
+    - 'ordernr'
+    - 'bestellnummer'
+  total_amount:
+    - 'total (due|amount|to pay)'
+    - 'amount due'
+    - 'grand total'
+    - 'balance due'
+    - 'att betala'
+    - 'summa att betala'
+    - 'gesamtbetrag'
+    - 'total'
+  line_items_header:
+    - 'description'
+    - 'beskrivning'
+    - 'beschreibung'
+    - 'item'
+  line_items_end:
+    - 'subtotal'
+    - 'sub-total'
+    - 'summa exkl\.? moms'
+    - 'netto(betrag)?'
+
+suppliers:
+  - name: Nordvik Labware AB
+    aliases: [Nordvik Labware]
+    email_domains: [nordviklabware.se]
+    date_order: dmy
+    currency: SEK
+  - name: PipetteCo Scientific Ltd
+    aliases: [PipetteCo Scientific, PipetteCo]
+    email_domains: [pipetteco.ie]
+    date_order: dmy
+    currency: EUR
+  - name: BioReagent Supply GmbH
+    aliases: [BioReagent Supply]
+    email_domains: [bioreagent-supply.de]
+    date_order: dmy
+    currency: EUR
+  - name: Kalibra Instrument Services AB
+    aliases: [Kalibra Instrument Services, Kalibra]
+    email_domains: [kalibra.se]
+    date_order: dmy
+    currency: SEK
+  - name: SpectraCare Field Service Inc.
+    aliases: [SpectraCare Field Service, SpectraCare]
+    email_domains: [spectracare.com]
+    date_order: mdy
+    currency: USD
+  - name: ColdChain Logistics AB
+    aliases: [ColdChain Logistics, ColdChain]
+    email_domains: [coldchainlogistics.se]
+    date_order: dmy
+    currency: SEK
+  - name: Baltic Freight Express OÜ
+    aliases: [Baltic Freight Express, Baltic Freight]
+    email_domains: [balticfreight.ee]
+    date_order: dmy
+    currency: EUR
+
+# Our own company: never mistake it for the supplier.
+buyer_aliases: [Aurora Biosciences]

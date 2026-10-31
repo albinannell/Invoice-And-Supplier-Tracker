@@ -2,8 +2,16 @@
 
 Drop PDF or `.eml` invoices into `inbox/`, run one command, get structured data out.
 
-> Status: **Stage 1 — synthetic data generator.** Extraction, categorization,
-> flags and reporting follow in later stages.
+> Status: **Stage 2 — extraction.** Categorization, CSV output, flags and
+> reporting follow in later stages.
+
+## Quick start
+
+```bash
+python scripts/generate_invoices.py   # fill inbox/ with synthetic invoices
+python -m invoice_tracker run         # extract every invoice in inbox/
+pytest                                # run the tests
+```
 
 ## Setup
 
@@ -52,11 +60,82 @@ Planted problems:
 every file; tests use it to score extraction. Output is deterministic for a
 given seed.
 
+## Extraction
+
+Each file in `inbox/` is loaded into a `RawDocument`:
+
+- **PDF** — pdfplumber words, grouped into lines and *segments* (runs of words
+  separated by a wide gap, so a label and its value become separate segments).
+- **.eml** — each PDF attachment becomes a document; an email without a PDF
+  falls back to its body text.
+
+The **rule-based extractor** (`invoice_tracker/extract/rules.py`) finds a
+segment whose whole text is a known label (`Invoice No.`, `Fakturadatum:`,
+`Customer PO`, …) and takes the value to its right, or directly below it for
+"labels above values" layouts. Values are validated (dates must parse, totals
+must be numbers), so a wrong neighbour is skipped rather than accepted.
+Exact-match labels mean `Subtotal` never wins over `Total`, and `Due date`
+never wins over `Invoice date`.
+
+- Supplier: matched by name / alias / email domain from `config/extraction.yaml`;
+  unknown suppliers fall back to the letterhead text (`supplier_known = False`).
+- Dates: ISO, `06 Aug 2026`, `7 juli 2026`, `29.05.2026`, `05/04/2026`. Ambiguous
+  slash dates use the supplier's `date_order` (default day-first).
+- Amounts: `1 234,50`, `1.234,50`, `1,234.50`, `$2,912.02`, `EUR 99.00`.
+- Currency: from the total line, else anywhere in the document, else the
+  supplier default.
+- Missing fields are returned as `None`, never guessed.
+
+Labels and suppliers are configured in `config/extraction.yaml`. Add a label
+synonym or supplier there; no code changes needed.
+
+### Swapping in another extractor (e.g. an LLM)
+
+Extractors implement one method:
+
+```python
+class Extractor(Protocol):
+    name: str
+    def extract(self, doc: RawDocument) -> Invoice: ...
+```
+
+`doc.text` holds the plain text (what you'd send an LLM); `doc.lines` holds the
+layout. Register the class and select it on the command line:
+
+```python
+from invoice_tracker.extract import register
+register("llm", LLMExtractor)
+```
+```bash
+python -m invoice_tracker run --extractor llm
+```
+
+## Tests
+
+```bash
+pytest
+```
+
+`tests/test_extraction.py` generates a fresh inbox, checks every field of every
+invoice against the ground truth, and unit-tests the amount/date/currency
+parsers, email-body input, unknown suppliers and extractor swapping.
+
 ## Project layout
 
 ```
+config/
+  extraction.yaml        # label synonyms, known suppliers
 invoice_tracker/
-  synthetic.py         # invoice generator (reportlab)
+  models.py              # RawDocument, Invoice
+  extract/
+    base.py              # Extractor protocol + registry
+    loaders.py           # PDF / .eml -> RawDocument
+    parsing.py           # amount, date, currency parsing
+    rules.py             # RuleBasedExtractor
+  pipeline.py            # inbox -> invoices
+  cli.py                 # python -m invoice_tracker ...
+  synthetic.py           # invoice generator (reportlab)
 scripts/
-  generate_invoices.py # CLI wrapper for the generator
+  generate_invoices.py   # CLI wrapper for the generator
+tests/
 ```
