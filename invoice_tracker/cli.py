@@ -10,6 +10,7 @@ from .extract import available_extractors, get_extractor
 from .flags import ALL_FLAGS
 from .output import write_invoices_csv
 from .pipeline import process_inbox
+from .summary import monthly_summary, write_report, write_summary_csv
 
 
 def cmd_run(args: argparse.Namespace) -> None:
@@ -18,6 +19,9 @@ def cmd_run(args: argparse.Namespace) -> None:
         raise SystemExit(f"Inbox folder not found: {inbox}/")
     invoices = process_inbox(inbox, get_extractor(args.extractor))
     csv_path = write_invoices_csv(invoices, out / "invoices.csv")
+    rows = monthly_summary(invoices)
+    summary_path = write_summary_csv(rows, out / "monthly_summary.csv")
+    report_path = write_report(invoices, rows, out / "report.md")
 
     by_cat = Counter(i.category for i in invoices)
     by_flag = Counter(f for i in invoices for f in i.flags)
@@ -27,7 +31,8 @@ def cmd_run(args: argparse.Namespace) -> None:
     print(f"  flagged:    {flagged} invoices"
           + (" (" + ", ".join(f"{f} {by_flag[f]}" for f in ALL_FLAGS if by_flag[f]) + ")"
              if flagged else ""))
-    print(f"Wrote {csv_path}")
+    for p in (csv_path, summary_path, report_path):
+        print(f"Wrote {p}")
 
 
 def main(argv=None) -> None:

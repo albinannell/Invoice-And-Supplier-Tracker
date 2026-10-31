@@ -2,13 +2,11 @@
 
 Drop PDF or `.eml` invoices into `inbox/`, run one command, get structured data out.
 
-> Status: **Stage 5 — flags.** The monthly summary follows in the next stage.
-
 ## Quick start
 
 ```bash
 python scripts/generate_invoices.py   # fill inbox/ with synthetic invoices
-python -m invoice_tracker run         # inbox/ -> output/invoices.csv
+python -m invoice_tracker run         # inbox/ -> output/
 pytest                                # run the tests
 ```
 
@@ -16,7 +14,27 @@ Options: `--inbox DIR`, `--out DIR`, `--extractor NAME`.
 
 ## Output
 
-`output/invoices.csv` — one row per invoice (UTF-8 with BOM, opens cleanly in Excel):
+`run` writes three files to `output/`:
+
+| file | what |
+|---|---|
+| `invoices.csv` | one row per invoice: extracted fields, category, flags |
+| `monthly_summary.csv` | spend per month × supplier × category × currency |
+| `report.md` | short readable report: totals, spend by month and category, top suppliers, flagged invoices with reasons, notes |
+
+Spend rules for the summary and report:
+
+- Exact duplicates are **excluded** from spend; near-duplicates and unusual
+  amounts are **included** (they may be legitimate) and called out in the notes.
+- Nothing is converted between currencies; every total is per currency.
+- An invoice with no invoice date is placed in the month it was received.
+
+`monthly_summary.csv` columns: `month` (YYYY-MM), `supplier`, `category`,
+`currency`, `invoice_count`, `total_spend`, `flagged_count`.
+
+### invoices.csv
+
+One row per invoice (UTF-8 with BOM, opens cleanly in Excel):
 
 | column | example |
 |---|---|
@@ -196,6 +214,9 @@ pytest
   (plus every planted problem on three other seeds), and unit-tests each rule:
   which copy is the duplicate, tolerance, currency/supplier separation, the
   IQR and small-history outlier rules, and missing fields.
+- `tests/test_summary.py` checks grouping, duplicate exclusion, undated
+  invoices, report contents, and that monthly totals reconcile with
+  `invoices.csv`.
 
 ## Project layout
 
@@ -208,6 +229,7 @@ invoice_tracker/
   models.py              # RawDocument, Invoice
   categorize.py          # Categorizer
   flags.py               # duplicate / outlier / missing-field flags
+  summary.py             # monthly summary CSV + report.md
   output.py              # CSV writing
   extract/
     base.py              # Extractor protocol + registry
