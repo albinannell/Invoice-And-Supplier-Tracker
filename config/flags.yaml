@@ -1,0 +1,24 @@
+# Thresholds for invoice flags.
+
+duplicates:
+  # Near-duplicate: same supplier + same PO, different invoice number,
+  # amounts within this relative difference (0.05 = 5%).
+  near_amount_tolerance: 0.05
+
+unusual_amount:
+  # Each invoice is compared with the supplier's *other* invoices in the same
+  # currency (exact duplicates excluded).
+  # With at least `min_peers_iqr` peers: flag if amount > Q3 + iqr_k * IQR
+  # and also >= min_ratio x the peers' median (guards against a tiny IQR and
+  # against suppliers whose normal invoices vary a lot).
+  min_peers_iqr: 5
+  iqr_k: 3.0
+  min_ratio: 4.0
+  # With fewer peers (but at least `min_peers_ratio`): flag if amount is more
+  # than `small_n_ratio` x the peers' median. Below that: not enough history,
+  # no check.
+  min_peers_ratio: 4
+  small_n_ratio: 8.0
+  #
+  # Tuned on 100 synthetic inboxes (seeds 1-100): all 200 planted outliers
+  # caught, 5 other invoices flagged (all >= 5x their supplier's median).

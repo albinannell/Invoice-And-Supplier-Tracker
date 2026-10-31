@@ -1,0 +1,62 @@
+# Spend categorization.
+#
+# 1. suppliers: exact supplier name (as extracted) -> category. Wins if present.
+# 2. keywords:  fallback for unknown suppliers. Each line item is matched
+#    against these regexes (case-insensitive, matched at a word start); the
+#    category with the most hits wins. A tie or no hits -> uncategorized.
+
+suppliers:
+  Nordvik Labware AB: lab_consumables
+  PipetteCo Scientific Ltd: lab_consumables
+  BioReagent Supply GmbH: lab_consumables
+  Kalibra Instrument Services AB: instrument_service
+  SpectraCare Field Service Inc.: instrument_service
+  ColdChain Logistics AB: shipping
+  Baltic Freight Express OÜ: shipping
+
+keywords:
+  lab_consumables:
+    - pipett
+    - tips?\b
+    - tubes?\b
+    - gloves?
+    - plates?\b
+    - cryovial
+    - reservoirs?
+    - reagent
+    - serum
+    - dmem
+    - media\b
+    - trypsin
+    - polymerase
+    - agarose
+    - buffer
+    - antibod
+    - consumable
+  instrument_service:
+    - calibrat
+    - maintenance
+    - service
+    - repair
+    - technician
+    - engineer
+    - labou?r\b
+    - replacement
+    - spare part
+    - preventive
+    - installation
+  shipping:
+    - freight
+    - courier
+    - shipment
+    - shipping
+    - dry ice
+    - customs
+    - pallet
+    - transport
+    - surcharge
+    - delivery
+    - parcel
+    - postage
+
+default: uncategorized
